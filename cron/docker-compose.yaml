@@ -1,0 +1,118 @@
+services:
+
+  # ==========================================
+  # LARAVEL OCTANE
+  # ==========================================
+  frankenphp_laravel:
+    image: cron-laravel
+    build:
+      context: .
+    container_name: frankenphp_laravel
+    command: >
+      php artisan octane:start
+      --server=frankenphp
+      --workers=8
+      --max-requests=1000
+      --host=0.0.0.0
+      --port=8000
+    depends_on:
+      - redis
+    ports:
+      - "8081:8000"
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    networks:
+      - laravel_network
+
+  # ==========================================
+  # DEFAULT QUEUE WORKER
+  # ==========================================
+  queue_default:
+    image: cron-laravel
+    container_name: laravel_queue_default
+    command: >
+      php artisan queue:work redis
+      --queue=default
+      --sleep=3
+      --tries=3
+      --timeout=120
+    depends_on:
+      - redis
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    networks:
+      - laravel_network
+
+  # ==========================================
+  # HLS QUEUE WORKER
+  # ==========================================
+  queue_hls:
+    image: cron-laravel
+    container_name: laravel_queue_hls
+    command: >
+      php artisan queue:work redis
+      --queue=hls
+      --sleep=3
+      --tries=3
+      --timeout=1800
+    depends_on:
+      - redis
+      # - minio
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    networks:
+      - laravel_network
+
+  # ==========================================
+  # LARAVEL SCHEDULER
+  # ==========================================
+  scheduler:
+    image: cron-laravel
+    container_name: laravel_scheduler
+    command: php artisan schedule:work
+    depends_on:
+      - redis
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    networks:
+      - laravel_network
+
+   # ==========================================
+  # LARAVEL REVERB
+  # ==========================================
+  reverb:
+    image: cron-laravel
+    container_name: laravel_reverb
+    command: >
+      php artisan reverb:start
+      --host=0.0.0.0
+      --port=8080
+    depends_on:
+      - redis
+    volumes:
+      - .:/app
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    networks:
+      - laravel_network
+
+  # ==========================================
+  # REDIS
+  # ==========================================
+  redis:
+    image: redis:7
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - laravel_network
+
+networks:
+  laravel_network:
+    driver: bridge
