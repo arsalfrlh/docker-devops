@@ -1,0 +1,100 @@
+#laravel http://127.0.0.1:8000
+#fastapi http://127.0.0.1:8000/ai/docs
+#websocket ws://127.0.0.1:8080/app/nwebg1rqlpwihnizmioi
+#docker compose logs -f laravel (nama service)
+
+services:
+
+  nginx:
+    image: nginx:alpine
+    container_name: reverse_proxy_nginx
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - laravel
+      - fastapi
+      - reverb
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflare_tunnel
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --url
+      - http://nginx:80
+    depends_on:
+      - nginx
+    restart: unless-stopped
+    networks:
+      - app-network
+
+
+  laravel:
+    image: proxy-laravel
+    build:
+      context: ./laravel
+      dockerfile: Dockerfile
+    container_name: laravel_app
+    command: >
+      php artisan octane:start
+      --server=frankenphp
+      --workers=8
+      --max-requests=1000
+      --host=0.0.0.0
+      --port=8000
+    depends_on:
+      - redis
+      - fastapi
+    expose:
+      - "8000"
+    volumes:
+      - ./laravel:/app
+    restart: unless-stopped
+    networks:
+      - app-network
+
+
+  reverb:
+    image: proxy-laravel
+    container_name: reverb_websocket
+    command: >
+      php artisan reverb:start
+      --host=0.0.0.0
+      --port=8080
+    depends_on:
+      - redis
+    volumes:
+      - ./laravel:/app
+    expose:
+      - "8080"
+    networks:
+      - app-network
+
+
+  fastapi:
+    build:
+      context: ./fastapi
+      dockerfile: Dockerfile
+    container_name: fastapi_ai
+    depends_on:
+      - redis
+    expose:
+      - "8000"
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7
+    container_name: cache_redis
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
